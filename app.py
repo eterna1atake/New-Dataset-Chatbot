@@ -42,7 +42,7 @@ except ImportError:
             return f"Error reading file: {str(e)}"
 
 # Configure API
-genai.configure(api_key="AIzaSyDnfUxgwBV4QaoXCo1hPHn4536BtlVAeq4")
+genai.configure(api_key="AIzaSyCSK5X-QqFXVYd0cfn55c0hRzpbM1PcrdU")
 
 # Enhanced generation config
 generation_config = {
