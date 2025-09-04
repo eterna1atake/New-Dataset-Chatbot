@@ -42,7 +42,7 @@ except ImportError:
             return f"Error reading file: {str(e)}"
 
 # Configure API
-genai.configure(api_key="AIzaSyCSK5X-QqFXVYd0cfn55c0hRzpbM1PcrdU")
+genai.configure(api_key="AIzaSyA4YjD2FBii2N7HtWq4LWtIPpZLthonp6c")
 
 # Enhanced generation config
 generation_config = {
@@ -60,11 +60,28 @@ SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE
 }
 
+# Enhanced prompt for direct responses
+ENHANCED_PROMPT_WORKAW = """
+คุณเป็น AI Assistant ของมหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ (KMUTNB) 
+
+กฎการตอบคำถาม:
+1. หากพบข้อมูลในเอกสาร: ให้ตอบข้อมูลโดยตรง ไม่ต้องขอโทษหรือขออภัย
+2. หากไม่พบข้อมูลในเอกสาร: ให้ตอบเพียงว่า "ไม่พบข้อมูล"
+3. ตอบเป็นภาษาไทยเท่านั้น
+4. ใช้ข้อมูลจากเอกสารที่ให้มาเป็นหลัก
+5. ตอบแบบกระชับ ชัดเจน ตรงประเด็น
+6. ไม่ต้องบอกแหล่งที่มาของข้อมูล เว้นแต่จำเป็น
+
+ตัวอย่างการตอบ:
+- เมื่อพบข้อมูล: "หลักสูตรวิศวกรรมศาสตร์มีทั้งหมด 15 สาขา ได้แก่ วิศวกรรมเครื่องกล วิศวกรรมไฟฟ้า..."
+- เมื่อไม่พบข้อมูล: "ไม่พบข้อมูล"
+"""
+
 model = genai.GenerativeModel(
     model_name="gemini-1.5-flash",
     safety_settings=SAFETY_SETTINGS,
     generation_config=generation_config,
-    system_instruction=PROMPT_WORKAW,
+    system_instruction=ENHANCED_PROMPT_WORKAW,
 )
 
 # Enhanced Rate limiting with better tracking
@@ -208,14 +225,18 @@ class DocumentManager:
     
     def search_document(self, search_term: str) -> str:
         if not st.session_state.document_content:
-            return "❌ ไม่มีเอกสารที่โหลดไว้"
+            return "ไม่พบข้อมูล"
         
         if ENHANCED_READER_AVAILABLE and st.session_state.last_file_path:
-            return search_in_document(
+            result = search_in_document(
                 st.session_state.last_file_path, 
                 search_term, 
                 use_ocr=st.session_state.use_ocr
             )
+            # ตรวจสอบว่าพบข้อมูลหรือไม่
+            if "ไม่พบ" in result or "❌" in result:
+                return "ไม่พบข้อมูล"
+            return result
         else:
             content = st.session_state.document_content
             lines = content.split('\n')
@@ -229,15 +250,15 @@ class DocumentManager:
                     found_lines.append(f"=== บรรทัดที่ {i+1} ===\n" + '\n'.join(context) + "\n")
             
             if found_lines:
-                return f"🔍 พบคำว่า '{search_term}' ในเอกสาร {len(found_lines)} ตำแหน่ง:\n\n" + '\n'.join(found_lines[:5])
+                return f"พบคำว่า '{search_term}' ในเอกสาร {len(found_lines)} ตำแหน่ง:\n\n" + '\n'.join(found_lines[:5])
             else:
-                return f"❌ ไม่พบคำว่า '{search_term}' ในเอกสาร"
+                return "ไม่พบข้อมูล"
 
 doc_manager = DocumentManager()
 
 def clear_history():
     st.session_state["messages"] = [
-        {"role": "model", "content": "KMUTNB Chatbot สวัสดีค่ะ คุณลูกค้า สอบถามข้อมูลเกี่ยวกับ KMUTNB เรื่องใดคะ"}
+        {"role": "model", "content": "สวัสดีค่ะ สอบถามข้อมูลเกี่ยวกับ KMUTNB เรื่องใดคะ"}
     ]
     st.rerun()
 
@@ -263,7 +284,7 @@ def safe_api_call(api_function, max_retries=3):
                 st.warning(f"⚠️ {error_msg}! รอ {wait_time} วินาที...")
                 time.sleep(wait_time)
             else:
-                return "ขออภัยค่ะ ระบบกำลังยุ่ง กรุณาลองใหม่ในอีกสักครู่นะคะ 🙏"
+                return "ไม่พบข้อมูล"
                 
         except Exception as e:
             error_msg = f"API Error: {str(e)}"
@@ -273,9 +294,9 @@ def safe_api_call(api_function, max_retries=3):
                 st.warning(f"⚠️ {error_msg} (ลองใหม่ครั้งที่ {attempt + 2})")
                 time.sleep(5 * (attempt + 1))
             else:
-                return f"เกิดข้อผิดพลาด: {str(e)}"
+                return "ไม่พบข้อมูล"
     
-    return "ไม่สามารถประมวลผลได้ในขณะนี้"
+    return "ไม่พบข้อมูล"
 
 def enhanced_response_generation(prompt: str, document_content: str, expert_role: str = "") -> str:
     question_type = analyze_question_type(prompt)
@@ -284,9 +305,18 @@ def enhanced_response_generation(prompt: str, document_content: str, expert_role
     def generate_response():
         history = []
         
+        # เพิ่มคำแนะนำเฉพาะการตอบคำถาม
+        instruction = """
+คำสั่งสำคัญ:
+- หากพบข้อมูลในเอกสาร: ตอบข้อมูลโดยตรง ไม่ต้องขอโทษหรือขออภัย
+- หากไม่พบข้อมูล: ตอบเพียง "ไม่พบข้อมูล"
+- ห้ามใช้คำว่า "ขออภัย" "ขอโทษ" "อย่างไรก็ตาม" "น่าเสียดาย"
+- ตอบเป็นภาษาไทยเท่านั้น
+        """
+        
         history.append({
             "role": "user", 
-            "parts": [{"text": f"เอกสารอ้างอิง:\n{document_content}"}]
+            "parts": [{"text": f"{instruction}\n\nเอกสารอ้างอิง:\n{document_content}"}]
         })
         
         recent_messages = st.session_state["messages"][-10:]
@@ -298,9 +328,39 @@ def enhanced_response_generation(prompt: str, document_content: str, expert_role
         
         chat_session = model.start_chat(history=history)
         response = chat_session.send_message(enhanced_prompt)
-        return response.text
+        
+        # ตรวจสอบและทำความสะอาดคำตอบ
+        cleaned_response = clean_response(response.text)
+        return cleaned_response
     
     return safe_api_call(generate_response)
+
+def clean_response(response_text: str) -> str:
+    """ทำความสะอาดคำตอบ เอาคำขออภัยออก"""
+    
+    # คำที่ไม่ต้องการ
+    unwanted_phrases = [
+        "ขออภัย", "ขอโทษ", "เสียใจด้วย", "น่าเสียดาย",
+        "อย่างไরก็ตาม", "อย่างไรก็ดี", "แต่ทั้งนี้",
+        "ขออภัยครับ", "ขออภัยค่ะ", "ขอโทษครับ", "ขอโทษค่ะ"
+    ]
+    
+    # ลบประโยคที่มีคำขออภัย
+    sentences = response_text.split('.')
+    cleaned_sentences = []
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if sentence and not any(phrase in sentence for phrase in unwanted_phrases):
+            cleaned_sentences.append(sentence)
+    
+    cleaned_response = '. '.join(cleaned_sentences)
+    
+    # ถ้าคำตอบว่างเปล่าหรือไม่มีข้อมูลที่มีประโยชน์
+    if not cleaned_response.strip() or len(cleaned_response.strip()) < 10:
+        return "ไม่พบข้อมูล"
+    
+    return cleaned_response.strip()
 
 def analyze_question_type(prompt: str) -> str:
     prompt_lower = prompt.lower()
@@ -321,18 +381,18 @@ def analyze_question_type(prompt: str) -> str:
 def enhance_prompt_based_on_type(prompt: str, question_type: str, expert_role: str = "") -> str:
     base_enhancement = ""
     if expert_role:
-        base_enhancement = f"คุณเป็นผู้เชี่ยวชาญด้าน {expert_role} กรุณาตอบคำถามในฐานะผู้เชี่ยวชาญ: "
+        base_enhancement = f"คุณเป็นผู้เชี่ยวชาญด้าน {expert_role} "
     
     enhancements = {
-        'search': f"{base_enhancement}กรุณาค้นหาข้อมูลที่เกี่ยวข้องในเอกสารและตอบอย่างละเอียด: ",
-        'compare': f"{base_enhancement}กรุณาเปรียบเทียบและวิเคราะห์ความแตกต่างอย่างชัดเจน: ",
-        'explain': f"{base_enhancement}กรุณาอธิบายอย่างละเอียดและให้ตัวอย่างประกอบ: ",
-        'list': f"{base_enhancement}กรุณาจัดทำรายการที่ครบถ้วนและเรียงลำดับ: ",
-        'example': f"{base_enhancement}กรุณาให้ตัวอย่างที่ชัดเจนและหลากหลาย: ",
-        'general': f"{base_enhancement}กรุณาตอบคำถามอย่างละเอียดและครบถ้วน: "
+        'search': f"{base_enhancement}ค้นหาข้อมูลที่เกี่ยวข้องในเอกสารและตอบอย่างละเอียด: ",
+        'compare': f"{base_enhancement}เปรียบเทียบและวิเคราะห์ความแตกต่างอย่างชัดเจน: ",
+        'explain': f"{base_enhancement}อธิบายอย่างละเอียดและให้ตัวอย่างประกอบ: ",
+        'list': f"{base_enhancement}จัดทำรายการที่ครบถ้วนและเรียงลำดับ: ",
+        'example': f"{base_enhancement}ให้ตัวอย่างที่ชัดเจนและหลากหลาย: ",
+        'general': f"{base_enhancement}ตอบคำถามอย่างละเอียดและครบถ้วน: "
     }
     
-    return enhancements.get(question_type, base_enhancement + "กรุณาตอบคำถามอย่างละเอียดและครบถ้วน: ") + prompt
+    return enhancements.get(question_type, base_enhancement + "ตอบคำถามอย่างละเอียดและครบถ้วน: ") + prompt
 
 # Page config
 st.set_page_config(
@@ -368,18 +428,16 @@ with st.sidebar:
     if st.button("Clear History", use_container_width=True):
         clear_history()
 
-   
-
 # Main app
 st.title("💬 KMUTNB Enhanced Chatbot")
-st.write("ระบบ AI ตอบคำถามเกี่ยวกับ KMUTNB อย่างละเอียดและแม่นยำ")
+st.write("ระบบ AI ตอบคำถามเกี่ยวกับ KMUTNB อย่างตรงไปตรงมา")
 
 # Initialize messages
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
         {
             "role": "model",
-            "content": "KMUTNB Chatbot สวัสดีค่ะ คุณลูกค้า สอบถามข้อมูลเกี่ยวกับ KMUTNB เรื่องใดคะ ระบบได้รับการปรับปรุงให้อ่านเอกสารได้ละเอียดและตอบคำถามได้แม่นยำมากขึ้นแล้วค่ะ",
+            "content": "สวัสดีค่ะ สอบถามข้อมูลเกี่ยวกับ KMUTNB เรื่องใดคะ",
         }
     ]
 
@@ -420,7 +478,7 @@ if prompt := st.chat_input("💭 Type your question"):
         st.write(prompt)
     
     with st.chat_message("model"):
-        with st.spinner("🤔 กำลังประมวลผลอย่างละเอียด..."):
+        with st.spinner("🤔 กำลังประมวลผลคำถาม..."):
             
             if prompt.lower().startswith("ค้นหา:") or prompt.lower().startswith("search:"):
                 search_term = prompt.split(":", 1)[1].strip()
@@ -430,4 +488,3 @@ if prompt := st.chat_input("💭 Type your question"):
             
             st.write(response_text)
             st.session_state["messages"].append({"role": "model", "content": response_text})
-
