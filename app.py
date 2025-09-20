@@ -314,7 +314,7 @@ with st.sidebar:
     
     file_path = st.text_input(
         "เส้นทางไฟล์:", 
-        value="/Users/trumanblack/Documents/workaw/FinalDataset.pdf"
+        value="FinalDataset.pdf"
     )
     
     if st.button("🔄 โหลดใหม่", use_container_width=True):
