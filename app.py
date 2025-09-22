@@ -9,7 +9,7 @@ from google.api_core.exceptions import ResourceExhausted
 import traceback
 
 # Configure API
-genai.configure(api_key="AIzaSyDnfUxgwBV4QaoXCo1hPHn4536BtlVAeq4")
+genai.configure(api_key="AIzaSyBmch5pqGDnzYxmk90cdiK3Z7LuYZry-78")
 
 # Generation config - ปรับให้เสถียรมากขึ้น
 generation_config = {
