@@ -14,8 +14,8 @@ genai.configure(api_key="AIzaSyBmch5pqGDnzYxmk90cdiK3Z7LuYZry-78")
 # Generation config - ปรับให้เสถียรมากขึ้น
 generation_config = {
     "temperature": 0.5,  # เพิ่มขึ้นเล็กน้อยเพื่อความเสถียร
-    "top_p": 0.9,
-    "top_k": 40,
+    "top_p": 1.0,
+    "top_k": 60,
     "max_output_tokens": 2048,  # ลดลงเพื่อประหยัด token
     "response_mime_type": "text/plain",
 }
